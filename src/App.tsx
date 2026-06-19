@@ -77,16 +77,15 @@ export default function App() {
     setAutoOpenedOnline(false);
   }, [currentUser?.id, simulatorRole]);
 
-  // Auto-activate online status for logged in drivers
+  // Auto-activate online status for logged in drivers (so that they are showing up as online automatically as long as they are logged in)
   useEffect(() => {
-    if (currentUser?.role === 'driver' && simulatorRole === 'driver' && !autoOpenedOnline && drivers.length > 0) {
+    if (currentUser?.role === 'driver' && drivers.length > 0) {
       const currentDriver = drivers.find(d => d.user_id === currentUser.id);
-      if (currentDriver && currentDriver.online_status !== 'online') {
+      if (!currentDriver || currentDriver.online_status !== 'online') {
         handleToggleOnline('online');
       }
-      setAutoOpenedOnline(true);
     }
-  }, [currentUser, simulatorRole, drivers, autoOpenedOnline]);
+  }, [currentUser?.id, drivers]);
 
   // Load and Pool state from backend
   const fetchState = async () => {
@@ -139,9 +138,14 @@ export default function App() {
         // Also update local current user reference if updated in database
         if (currentUser) {
           const matched = (data.users || []).find((u: DbUser) => u.id === currentUser.id);
-          if (matched && JSON.stringify(matched) !== JSON.stringify(currentUser)) {
-            setCurrentUser(matched);
-            localStorage.setItem('nitip_dong_user', JSON.stringify(matched));
+          if (matched) {
+            if (JSON.stringify(matched) !== JSON.stringify(currentUser)) {
+              setCurrentUser(matched);
+              localStorage.setItem('nitip_dong_user', JSON.stringify(matched));
+            }
+          } else {
+            // Safe fallback: server has lost the user record, re-sync to server
+            syncUserToServer(currentUser);
           }
         }
       } else {
@@ -157,6 +161,48 @@ export default function App() {
       setMessages(data.messages || []);
       setOrders(data.orders || []);
       setPayments(data.payments || []);
+    }
+  };
+
+  const syncUserToServer = async (user: DbUser) => {
+    try {
+      if (user.email) {
+        const res = await fetch('/api/users/google', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            name: user.name,
+            role: user.role,
+            email: user.email
+          })
+        });
+        if (res.ok) {
+          const syncedUser = await res.json() as DbUser;
+          if (syncedUser.id !== user.id) {
+            setCurrentUser(syncedUser);
+            localStorage.setItem('nitip_dong_user', JSON.stringify(syncedUser));
+          }
+        }
+      } else {
+        const res = await fetch('/api/users/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            phone: user.phone,
+            name: user.name,
+            role: user.role 
+          })
+        });
+        if (res.ok) {
+          const syncedUser = await res.json() as DbUser;
+          if (syncedUser.id !== user.id) {
+            setCurrentUser(syncedUser);
+            localStorage.setItem('nitip_dong_user', JSON.stringify(syncedUser));
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Error auto-syncing session to backend:', err);
     }
   };
 
