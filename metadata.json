@@ -1,0 +1,6 @@
+{
+  "name": "Nitip Dong",
+  "description": "Nitip Makanan Jadi Gampang - Food Jastip Kemayoran connecting customers and drivers in Kemayoran, Jakarta Pusat.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
