@@ -9,6 +9,20 @@ import AdminDashboard from './components/AdminDashboard';
 import { 
   Phone, Smartphone, ShieldCheck, Compass, CompassIcon, ArrowRight, Star, Activity
 } from 'lucide-react';
+import {
+  localGetState,
+  localUserLogin,
+  localUserGoogleLogin,
+  localResetDb,
+  localStartChat,
+  localSendMessage,
+  localToggleOnline,
+  localUpdateLocation,
+  localCreateOrder,
+  localUpdateOrderStatus,
+  localVerifyPayment,
+  localUpdateDriverStatusByAdmin
+} from './utils/localDb';
 
 export default function App() {
   // Sync States loaded from backend
@@ -18,6 +32,9 @@ export default function App() {
   const [messages, setMessages] = useState<DbMessage[]>([]);
   const [orders, setOrders] = useState<DbOrder[]>([]);
   const [payments, setPayments] = useState<DbPayment[]>([]);
+
+  // Toggle client-side mock db mode if server fails
+  const [isOfflineMode, setIsOfflineMode] = useState(false);
 
   // Auth / Navigation States
   const [currentUser, setCurrentUser] = useState<DbUser | null>((() => {
@@ -49,10 +66,45 @@ export default function App() {
 
   // Load and Pool state from backend
   const fetchState = async () => {
+    if (isOfflineMode) {
+      const data = localGetState();
+      setUsers(data.users || []);
+      setDrivers(data.drivers || []);
+      setChats(data.chats || []);
+      setMessages(data.messages || []);
+      setOrders(data.orders || []);
+      setPayments(data.payments || []);
+      if (currentUser) {
+        const matched = (data.users || []).find((u: DbUser) => u.id === currentUser.id);
+        if (matched && JSON.stringify(matched) !== JSON.stringify(currentUser)) {
+          setCurrentUser(matched);
+          localStorage.setItem('nitip_dong_user', JSON.stringify(matched));
+        }
+      }
+      return;
+    }
+
     try {
       const res = await fetch('/api/state');
+      const contentType = res.headers.get('content-type');
+      if (res.status === 404 || (contentType && contentType.includes('text/html'))) {
+        console.warn('Backend server not found/unreachable. Switching to high-fidelity client-only database fallback!');
+        setIsOfflineMode(true);
+        const data = localGetState();
+        setUsers(data.users || []);
+        setDrivers(data.drivers || []);
+        setChats(data.chats || []);
+        setMessages(data.messages || []);
+        setOrders(data.orders || []);
+        setPayments(data.payments || []);
+        return;
+      }
+
       if (res.ok) {
         const data = await res.json();
+        if (typeof data !== 'object') {
+          throw new Error('Response is not JSON');
+        }
         setUsers(data.users || []);
         setDrivers(data.drivers || []);
         setChats(data.chats || []);
@@ -68,9 +120,19 @@ export default function App() {
             localStorage.setItem('nitip_dong_user', JSON.stringify(matched));
           }
         }
+      } else {
+        setIsOfflineMode(true);
       }
     } catch (error) {
-      console.error('Error fetching state from server:', error);
+      console.error('Error fetching state from server, switching to local DB fallback:', error);
+      setIsOfflineMode(true);
+      const data = localGetState();
+      setUsers(data.users || []);
+      setDrivers(data.drivers || []);
+      setChats(data.chats || []);
+      setMessages(data.messages || []);
+      setOrders(data.orders || []);
+      setPayments(data.payments || []);
     }
   };
 
@@ -87,6 +149,28 @@ export default function App() {
     if (!phoneNo.trim()) return;
     setAuthError(null);
     setIsLoading(true);
+
+    if (isOfflineMode) {
+      try {
+        const user = localUserLogin(phoneNo, fullName || undefined, authRole);
+        setCurrentUser(user);
+        setSimulatorRole(user.role);
+        localStorage.setItem('nitip_dong_user', JSON.stringify(user));
+        // immediate local sync
+        const data = localGetState();
+        setUsers(data.users || []);
+        setDrivers(data.drivers || []);
+        setChats(data.chats || []);
+        setMessages(data.messages || []);
+        setOrders(data.orders || []);
+        setPayments(data.payments || []);
+      } catch (err: any) {
+        setAuthError(err.message || 'Terjadi kesalahan sistem');
+      } finally {
+        setIsLoading(false);
+      }
+      return;
+    }
 
     try {
       const res = await fetch('/api/users/login', {
@@ -111,7 +195,23 @@ export default function App() {
       }
     } catch (err) {
       console.error('Login error:', err);
-      setAuthError('Gagal menghubungi server');
+      try {
+        console.warn('Network error during login, falling back to local DB!');
+        setIsOfflineMode(true);
+        const user = localUserLogin(phoneNo, fullName || undefined, authRole);
+        setCurrentUser(user);
+        setSimulatorRole(user.role);
+        localStorage.setItem('nitip_dong_user', JSON.stringify(user));
+        const data = localGetState();
+        setUsers(data.users || []);
+        setDrivers(data.drivers || []);
+        setChats(data.chats || []);
+        setMessages(data.messages || []);
+        setOrders(data.orders || []);
+        setPayments(data.payments || []);
+      } catch (localErr: any) {
+        setAuthError(localErr.message || 'Gagal login via data lokal');
+      }
     } finally {
       setIsLoading(false);
     }
@@ -120,6 +220,28 @@ export default function App() {
   const handleGoogleLogin = async () => {
     setAuthError(null);
     setIsLoading(true);
+
+    if (isOfflineMode) {
+      try {
+        const user = localUserGoogleLogin(googleEmail, fullName || 'Teman Titipku', authRole);
+        setCurrentUser(user);
+        setSimulatorRole(user.role);
+        localStorage.setItem('nitip_dong_user', JSON.stringify(user));
+        const data = localGetState();
+        setUsers(data.users || []);
+        setDrivers(data.drivers || []);
+        setChats(data.chats || []);
+        setMessages(data.messages || []);
+        setOrders(data.orders || []);
+        setPayments(data.payments || []);
+      } catch (err: any) {
+        setAuthError(err.message || 'Akses ditolak atau kesalahan sistem');
+      } finally {
+        setIsLoading(false);
+      }
+      return;
+    }
+
     try {
       const res = await fetch('/api/users/google', {
         method: 'POST',
@@ -143,7 +265,23 @@ export default function App() {
       }
     } catch (err) {
       console.error('Google login error:', err);
-      setAuthError('Gagal menghubungi server');
+      try {
+        console.warn('Network error during Google login, falling back to local DB!');
+        setIsOfflineMode(true);
+        const user = localUserGoogleLogin(googleEmail, fullName || 'Teman Titipku', authRole);
+        setCurrentUser(user);
+        setSimulatorRole(user.role);
+        localStorage.setItem('nitip_dong_user', JSON.stringify(user));
+        const data = localGetState();
+        setUsers(data.users || []);
+        setDrivers(data.drivers || []);
+        setChats(data.chats || []);
+        setMessages(data.messages || []);
+        setOrders(data.orders || []);
+        setPayments(data.payments || []);
+      } catch (localErr: any) {
+        setAuthError(localErr.message || 'Gagal login via Google lokal');
+      }
     } finally {
       setIsLoading(false);
     }
@@ -156,22 +294,37 @@ export default function App() {
 
   const handleResetDb = async () => {
     if (!confirm('Apakah Anda yakin ingin me-reset database simulasi ke pengaturan bawaan?')) return;
+    
+    if (isOfflineMode) {
+      localResetDb();
+      fetchState();
+      alert('Database sukses dikembalikan ke kondisi default!');
+      return;
+    }
+
     try {
       const res = await fetch('/api/reset', { method: 'POST' });
       if (res.ok) {
         fetchState();
-        // Keep login or sync role
-        const data = await res.json();
         alert('Database sukses dikembalikan ke kondisi default!');
       }
     } catch (err) {
       console.error('Reset error:', err);
+      localResetDb();
+      setIsOfflineMode(true);
+      fetchState();
+      alert('Database sukses dikembalikan ke kondisi default!');
     }
   };
 
   // Actions
   const handleStartChat = async (driverId: string) => {
     if (!currentUser) return;
+    if (isOfflineMode) {
+      localStartChat(currentUser.id, driverId);
+      fetchState();
+      return;
+    }
     try {
       const res = await fetch('/api/chats/create', {
         method: 'POST',
@@ -180,9 +333,16 @@ export default function App() {
       });
       if (res.ok) {
         fetchState();
+      } else {
+        setIsOfflineMode(true);
+        localStartChat(currentUser.id, driverId);
+        fetchState();
       }
     } catch (err) {
       console.error('Start chat error:', err);
+      setIsOfflineMode(true);
+      localStartChat(currentUser.id, driverId);
+      fetchState();
     }
   };
 
@@ -194,6 +354,11 @@ export default function App() {
     lng?: number | null
   ) => {
     if (!currentUser) return;
+    if (isOfflineMode) {
+      localSendMessage(chatId, currentUser.id, text, imageUrl, lat, lng);
+      fetchState();
+      return;
+    }
     try {
       const res = await fetch('/api/messages', {
         method: 'POST',
@@ -209,13 +374,25 @@ export default function App() {
       });
       if (res.ok) {
         fetchState();
+      } else {
+        setIsOfflineMode(true);
+        localSendMessage(chatId, currentUser.id, text, imageUrl, lat, lng);
+        fetchState();
       }
     } catch (err) {
       console.error('Send message error:', err);
+      setIsOfflineMode(true);
+      localSendMessage(chatId, currentUser.id, text, imageUrl, lat, lng);
+      fetchState();
     }
   };
 
   const handleUploadPaymentProof = async (orderId: string, proofUrl: string) => {
+    if (isOfflineMode) {
+      localUpdateOrderStatus(orderId, 'Menunggu Verifikasi', proofUrl);
+      fetchState();
+      return;
+    }
     try {
       const res = await fetch(`/api/orders/${orderId}/status`, {
         method: 'POST',
@@ -227,14 +404,26 @@ export default function App() {
       });
       if (res.ok) {
         fetchState();
+      } else {
+        setIsOfflineMode(true);
+        localUpdateOrderStatus(orderId, 'Menunggu Verifikasi', proofUrl);
+        fetchState();
       }
     } catch (err) {
       console.error('Upload proof error:', err);
+      setIsOfflineMode(true);
+      localUpdateOrderStatus(orderId, 'Menunggu Verifikasi', proofUrl);
+      fetchState();
     }
   };
 
   const handleToggleOnline = async (onlineStatus: 'online' | 'offline') => {
     if (!currentUser) return;
+    if (isOfflineMode) {
+      localToggleOnline(currentUser.id, onlineStatus);
+      fetchState();
+      return;
+    }
     try {
       const res = await fetch('/api/drivers/status', {
         method: 'POST',
@@ -246,14 +435,26 @@ export default function App() {
       });
       if (res.ok) {
         fetchState();
+      } else {
+        setIsOfflineMode(true);
+        localToggleOnline(currentUser.id, onlineStatus);
+        fetchState();
       }
     } catch (err) {
       console.error('Toggle online error:', err);
+      setIsOfflineMode(true);
+      localToggleOnline(currentUser.id, onlineStatus);
+      fetchState();
     }
   };
 
   const handleUpdateLocation = async (lat: number, lng: number) => {
     if (!currentUser) return;
+    if (isOfflineMode) {
+      localUpdateLocation(currentUser.id, lat, lng);
+      setDrivers(prev => prev.map(d => d.user_id === currentUser.id ? { ...d, latitude: lat, longitude: lng } : d));
+      return;
+    }
     try {
       const res = await fetch('/api/drivers/status', {
         method: 'POST',
@@ -265,16 +466,27 @@ export default function App() {
         })
       });
       if (res.ok) {
-        // quiet update
+        setDrivers(prev => prev.map(d => d.user_id === currentUser.id ? { ...d, latitude: lat, longitude: lng } : d));
+      } else {
+        setIsOfflineMode(true);
+        localUpdateLocation(currentUser.id, lat, lng);
         setDrivers(prev => prev.map(d => d.user_id === currentUser.id ? { ...d, latitude: lat, longitude: lng } : d));
       }
     } catch (err) {
       console.error('GPS update error:', err);
+      setIsOfflineMode(true);
+      localUpdateLocation(currentUser.id, lat, lng);
+      setDrivers(prev => prev.map(d => d.user_id === currentUser.id ? { ...d, latitude: lat, longitude: lng } : d));
     }
   };
 
   const handleCreateOrder = async (orderData: { customer_id: string; item_description: string; food_price: number; delivery_fee: number }) => {
     if (!currentUser) return;
+    if (isOfflineMode) {
+      localCreateOrder(currentUser.id, orderData.customer_id, orderData.item_description, orderData.food_price, orderData.delivery_fee);
+      fetchState();
+      return;
+    }
     try {
       const res = await fetch('/api/orders/create', {
         method: 'POST',
@@ -286,13 +498,25 @@ export default function App() {
       });
       if (res.ok) {
         fetchState();
+      } else {
+        setIsOfflineMode(true);
+        localCreateOrder(currentUser.id, orderData.customer_id, orderData.item_description, orderData.food_price, orderData.delivery_fee);
+        fetchState();
       }
     } catch (err) {
       console.error('Create order error:', err);
+      setIsOfflineMode(true);
+      localCreateOrder(currentUser.id, orderData.customer_id, orderData.item_description, orderData.food_price, orderData.delivery_fee);
+      fetchState();
     }
   };
 
   const handleUpdateOrderStatus = async (orderId: string, status: string) => {
+    if (isOfflineMode) {
+      localUpdateOrderStatus(orderId, status);
+      fetchState();
+      return;
+    }
     try {
       const res = await fetch(`/api/orders/${orderId}/status`, {
         method: 'POST',
@@ -301,13 +525,25 @@ export default function App() {
       });
       if (res.ok) {
         fetchState();
+      } else {
+        setIsOfflineMode(true);
+        localUpdateOrderStatus(orderId, status);
+        fetchState();
       }
     } catch (err) {
       console.error('Update status error:', err);
+      setIsOfflineMode(true);
+      localUpdateOrderStatus(orderId, status);
+      fetchState();
     }
   };
 
   const handleVerifyPayment = async (paymentId: string, action: 'approve' | 'reject') => {
+    if (isOfflineMode) {
+      localVerifyPayment(paymentId, action);
+      fetchState();
+      return;
+    }
     try {
       const res = await fetch(`/api/admin/payments/${paymentId}/verify`, {
         method: 'POST',
@@ -316,13 +552,25 @@ export default function App() {
       });
       if (res.ok) {
         fetchState();
+      } else {
+        setIsOfflineMode(true);
+        localVerifyPayment(paymentId, action);
+        fetchState();
       }
     } catch (err) {
       console.error('Verify payment error:', err);
+      setIsOfflineMode(true);
+      localVerifyPayment(paymentId, action);
+      fetchState();
     }
   };
 
   const handleUpdateDriverStatusByAdmin = async (driverUserId: string, status: string) => {
+    if (isOfflineMode) {
+      localUpdateDriverStatusByAdmin(driverUserId, status);
+      fetchState();
+      return;
+    }
     try {
       const res = await fetch(`/api/admin/drivers/${driverUserId}/status`, {
         method: 'POST',
@@ -331,9 +579,16 @@ export default function App() {
       });
       if (res.ok) {
         fetchState();
+      } else {
+        setIsOfflineMode(true);
+        localUpdateDriverStatusByAdmin(driverUserId, status);
+        fetchState();
       }
     } catch (err) {
       console.error('Suspend/approve driver error:', err);
+      setIsOfflineMode(true);
+      localUpdateDriverStatusByAdmin(driverUserId, status);
+      fetchState();
     }
   };
 
