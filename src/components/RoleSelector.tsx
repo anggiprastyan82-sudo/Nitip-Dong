@@ -18,8 +18,13 @@ export default function RoleSelector({
     <div className="w-full bg-white border-b border-emerald-100 px-6 py-4 flex flex-col md:flex-row justify-between items-center gap-4">
       {/* Brand Launcher Logo */}
       <div className="flex items-center gap-3">
-        <div className="w-10 h-10 bg-emerald-500 rounded-xl flex items-center justify-center text-white font-black text-xl shadow-lg shadow-emerald-200 italic">
-          N
+        <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center shadow-lg shadow-emerald-150/50 overflow-hidden border border-emerald-100">
+          <img 
+            src="https://i.postimg.cc/Yqy7CvSj/fb1e47cf-6b21-4017-9043-d948cba2e5fe.png" 
+            alt="Teman Titipku Logo" 
+            className="w-full h-full object-cover"
+            referrerPolicy="no-referrer"
+          />
         </div>
         <div>
           <h1 className="text-xl font-extrabold text-slate-800 tracking-tight leading-none italic">NITIP DONG</h1>

@@ -23,7 +23,15 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState<DbUser | null>((() => {
     try {
       const persisted = localStorage.getItem('nitip_dong_user');
-      return persisted ? JSON.parse(persisted) : null;
+      if (persisted) {
+        const u = JSON.parse(persisted);
+        if (u && u.name && /gojek/i.test(u.name)) {
+          u.name = u.name.replace(/Gojek\s+Jastiper\s+Google/gi, "Teman Titipku").replace(/Gojek/gi, "Teman Titipku");
+          localStorage.setItem('nitip_dong_user', JSON.stringify(u));
+        }
+        return u;
+      }
+      return null;
     } catch {
       return null;
     }
@@ -33,6 +41,8 @@ export default function App() {
   const [fullName, setFullName] = useState('');
   const [authRole, setAuthRole] = useState<'customer' | 'driver' | 'admin'>('customer');
   const [isLoading, setIsLoading] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [googleEmail, setGoogleEmail] = useState('');
 
   // Active Simulated View mode (RoleSelector)
   const [simulatorRole, setSimulatorRole] = useState<'customer' | 'driver' | 'admin'>('customer');
@@ -75,6 +85,7 @@ export default function App() {
   const handlePhoneLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!phoneNo.trim()) return;
+    setAuthError(null);
     setIsLoading(true);
 
     try {
@@ -94,23 +105,29 @@ export default function App() {
         setSimulatorRole(user.role);
         localStorage.setItem('nitip_dong_user', JSON.stringify(user));
         fetchState();
+      } else {
+        const errData = await res.json();
+        setAuthError(errData.error || 'Terjadi kesalahan sistem');
       }
     } catch (err) {
       console.error('Login error:', err);
+      setAuthError('Gagal menghubungi server');
     } finally {
       setIsLoading(false);
     }
   };
 
   const handleGoogleLogin = async () => {
+    setAuthError(null);
     setIsLoading(true);
     try {
       const res = await fetch('/api/users/google', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
-          name: fullName || 'Gojek Jastiper Google',
-          role: authRole 
+          name: fullName || 'Teman Titipku',
+          role: authRole,
+          email: googleEmail
         })
       });
 
@@ -120,9 +137,13 @@ export default function App() {
         setSimulatorRole(user.role);
         localStorage.setItem('nitip_dong_user', JSON.stringify(user));
         fetchState();
+      } else {
+        const errData = await res.json();
+        setAuthError(errData.error || 'Akses ditolak atau kesalahan sistem');
       }
     } catch (err) {
       console.error('Google login error:', err);
+      setAuthError('Gagal menghubungi server');
     } finally {
       setIsLoading(false);
     }
@@ -325,8 +346,13 @@ export default function App() {
         <div className="w-full max-w-sm bg-white border border-emerald-100 rounded-3xl p-6 shadow-xl shadow-emerald-250/50 space-y-6">
           {/* Logo Heading */}
           <div className="text-center space-y-2">
-            <div className="w-12 h-12 bg-emerald-500 rounded-2xl mx-auto flex items-center justify-center font-black text-white text-xl shadow-lg shadow-emerald-200 italic">
-              N
+            <div className="w-12 h-12 bg-white rounded-2xl mx-auto flex items-center justify-center shadow-lg shadow-emerald-150/50 overflow-hidden border border-emerald-100">
+              <img 
+                src="https://i.postimg.cc/Yqy7CvSj/fb1e47cf-6b21-4017-9043-d948cba2e5fe.png" 
+                alt="Teman Titipku Logo" 
+                className="w-full h-full object-cover"
+                referrerPolicy="no-referrer"
+              />
             </div>
             <div>
               <h1 className="text-xl font-extrabold text-slate-800 tracking-tight italic">NITIP DONG</h1>
@@ -378,6 +404,13 @@ export default function App() {
                 </button>
               </div>
             </div>
+
+            {authError && (
+              <div className="p-3 bg-red-50 border border-red-200 text-red-700 rounded-xl text-xs font-bold leading-relaxed shadow-sm shadow-red-100 flex items-start gap-2">
+                <span className="text-sm">⚠️</span>
+                <span>{authError}</span>
+              </div>
+            )}
 
             {/* Auth switcher tabs */}
             <div className="flex border-b border-emerald-100/70">
@@ -450,6 +483,23 @@ export default function App() {
                   />
                 </div>
 
+                <div className="space-y-1.5">
+                  <label className="text-[10px] uppercase font-bold text-slate-500">Email Google</label>
+                  <input
+                    type="email"
+                    value={googleEmail}
+                    onChange={(e) => setGoogleEmail(e.target.value)}
+                    placeholder="contoh@gmail.com"
+                    required
+                    className="w-full bg-slate-50/50 border border-emerald-100/80 rounded-xl px-3.5 py-2 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-emerald-400 focus:border-emerald-500 font-mono"
+                  />
+                  {authRole === 'admin' && (
+                    <p className="text-[10px] text-red-650 font-extrabold animate-pulse">
+                      * Perhatian: Role Admin wajib menggunakan email pemilik yang sah & terdaftar.
+                    </p>
+                  )}
+                </div>
+
                 <button
                   type="button"
                   onClick={handleGoogleLogin}
@@ -482,7 +532,16 @@ export default function App() {
       {/* 1. Multi-role simulator toolbar */}
       <RoleSelector
         currentRole={simulatorRole}
-        onChangeRole={setSimulatorRole}
+        onChangeRole={(role) => {
+          if (role === 'admin') {
+            const hasAccess = currentUser && currentUser.email && currentUser.email.toLowerCase().startsWith('anggiprastyan82@gmail');
+            if (!hasAccess) {
+              alert('Akses Terkunci! Hanya akun email pemilik yang sah & terdaftar yang diperbolehkan mengakses dashboard Admin.');
+              return;
+            }
+          }
+          setSimulatorRole(role);
+        }}
         onReset={handleResetDb}
         currentUserPhone={currentUser.phone}
       />

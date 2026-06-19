@@ -5,6 +5,7 @@ export interface DbUser {
   phone: string;
   avatar: string;
   rating: number;
+  email?: string;
 }
 
 export interface DbDriver {

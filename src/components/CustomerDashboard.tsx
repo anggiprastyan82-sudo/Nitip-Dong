@@ -140,68 +140,78 @@ export default function CustomerDashboard({
           </div>
 
           <div className="space-y-2.5 max-h-[300px] overflow-y-auto pr-1">
-            {drivers.map((drv) => {
-              const isSelected = drv.user_id === selectedDriverId;
-              const isOnline = drv.online_status === 'online';
-              return (
-                <button
-                  key={drv.id}
-                  onClick={() => handleStartChatWithDriver(drv.user_id)}
-                  disabled={drv.status === 'suspended'}
-                  className={`w-full text-left p-3.5 rounded-xl border transition-all flex items-center justify-between ${
-                    drv.status === 'suspended'
-                      ? 'bg-slate-50 border-emerald-100 opacity-50 cursor-not-allowed'
-                      : isSelected 
-                      ? 'bg-emerald-50 border-emerald-500 border-l-4 shadow-sm shadow-emerald-100' 
-                      : 'bg-white border-emerald-100/65 hover:border-emerald-305 hover:bg-emerald-50/10'
-                  }`}
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="relative">
-                      <img 
-                      src={drv.avatar} 
-                      alt={drv.name} 
-                      className="w-10 h-10 rounded-full object-cover border border-emerald-100"
-                      referrerPolicy="no-referrer"
-                      />
-                      <span className={`absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full border-2 border-white ${
-                        isOnline ? 'bg-emerald-500' : 'bg-slate-300'
-                      }`}></span>
-                    </div>
+            {drivers.filter(drv => drv.online_status === 'online').length === 0 ? (
+              <div className="bg-white border border-rose-100 rounded-2xl p-6 text-center text-xs text-rose-500 font-extrabold shadow-sm flex flex-col items-center gap-2">
+                <AlertCircle className="w-6 h-6 text-rose-400 animate-pulse" />
+                <span>Driver Tidak Ditemukan / Belum Ada Driver Online</span>
+                <span className="text-[10px] text-slate-400 font-medium leading-relaxed">
+                  Silakan buat/ganti role akun menjadi Driver di bar atas dan Login untuk mengaktifkan driver baru.
+                </span>
+              </div>
+            ) : (
+              drivers.filter(drv => drv.online_status === 'online').map((drv) => {
+                const isSelected = drv.user_id === selectedDriverId;
+                const isOnline = drv.online_status === 'online';
+                return (
+                  <button
+                    key={drv.id}
+                    onClick={() => handleStartChatWithDriver(drv.user_id)}
+                    disabled={drv.status === 'suspended'}
+                    className={`w-full text-left p-3.5 rounded-xl border transition-all flex items-center justify-between ${
+                      drv.status === 'suspended'
+                        ? 'bg-slate-50 border-emerald-100 opacity-50 cursor-not-allowed'
+                        : isSelected 
+                        ? 'bg-emerald-50 border-emerald-500 border-l-4 shadow-sm shadow-emerald-100' 
+                        : 'bg-white border-emerald-100/65 hover:border-emerald-305 hover:bg-emerald-50/10'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="relative">
+                        <img 
+                        src={drv.avatar} 
+                        alt={drv.name} 
+                        className="w-10 h-10 rounded-full object-cover border border-emerald-100"
+                        referrerPolicy="no-referrer"
+                        />
+                        <span className={`absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full border-2 border-white ${
+                          isOnline ? 'bg-emerald-500' : 'bg-slate-300'
+                        }`}></span>
+                      </div>
 
-                    <div className="text-xs">
-                      <span className="font-extrabold text-slate-800 block text-ellipsis truncate max-w-[140px]">
-                        {drv.name}
-                      </span>
-                      <div className="flex items-center gap-1.5 text-slate-450 mt-1">
-                        <span className="flex items-center text-amber-500 font-extrabold">
-                          <Star className="w-3 h-3 fill-amber-500 text-amber-500 mr-0.5 inline animate-pulse" />
-                          {drv.rating}
+                      <div className="text-xs">
+                        <span className="font-extrabold text-slate-800 block text-ellipsis truncate max-w-[140px]">
+                          {drv.name}
                         </span>
-                        <span>•</span>
-                        <span className="text-[10px] font-mono text-emerald-600 font-extrabold uppercase">
-                          {drv.online_status}
-                        </span>
+                        <div className="flex items-center gap-1.5 text-slate-450 mt-1">
+                          <span className="flex items-center text-amber-500 font-extrabold">
+                            <Star className="w-3 h-3 fill-amber-500 text-amber-500 mr-0.5 inline animate-pulse" />
+                            {drv.rating}
+                          </span>
+                          <span>•</span>
+                          <span className="text-[10px] font-mono text-emerald-600 font-extrabold uppercase">
+                            {drv.online_status}
+                          </span>
+                        </div>
                       </div>
                     </div>
-                  </div>
 
-                  <div className="flex flex-col items-end gap-1 shrink-0">
-                    {drv.status === 'suspended' ? (
-                      <span className="text-[9px] bg-red-100 text-red-600 px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider">Suspended</span>
-                    ) : (
-                      <span className="text-[10px] bg-emerald-500 hover:bg-emerald-600 text-white px-3 py-1.5 rounded-lg font-bold flex items-center gap-1 shadow-sm active:scale-95 transition-transform uppercase tracking-wider">
-                        <MessageSquare className="w-3.5 h-3.5" />
-                        Chat
+                    <div className="flex flex-col items-end gap-1 shrink-0">
+                      {drv.status === 'suspended' ? (
+                        <span className="text-[9px] bg-red-100 text-red-600 px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider">Suspended</span>
+                      ) : (
+                        <span className="text-[10px] bg-emerald-500 hover:bg-emerald-600 text-white px-3 py-1.5 rounded-lg font-bold flex items-center gap-1 shadow-sm active:scale-95 transition-transform uppercase tracking-wider">
+                          <MessageSquare className="w-3.5 h-3.5" />
+                          Chat
+                        </span>
+                      )}
+                      <span className="text-[9px] text-slate-400 font-mono font-medium">
+                        Kemayoran
                       </span>
-                    )}
-                    <span className="text-[9px] text-slate-400 font-mono font-medium">
-                      Kemayoran
-                    </span>
-                  </div>
-                </button>
-              );
-            })}
+                    </div>
+                  </button>
+                );
+              })
+            )}
           </div>
         </div>
 

@@ -73,7 +73,8 @@ function readDb() {
       name: "Dewi Lestari (Admin)",
       phone: "08999999999",
       avatar: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&q=80&w=200",
-      rating: 5.0
+      rating: 5.0,
+      email: "anggiprastyan82@gmail.com"
     }
   ];
 
@@ -81,7 +82,7 @@ function readDb() {
     {
       id: "dbdriver-1",
       user_id: "driver-1",
-      online_status: "online",
+      online_status: "offline",
       latitude: -6.151,
       longitude: 106.841,
       name: "Budi Santoso",
@@ -93,7 +94,7 @@ function readDb() {
     {
       id: "dbdriver-2",
       user_id: "driver-2",
-      online_status: "online",
+      online_status: "offline",
       latitude: -6.157,
       longitude: 106.848,
       name: "Yusuf Kuncoro",
@@ -177,7 +178,20 @@ app.post("/api/reset", (req, res) => {
 
 // Get entire state (for syncing)
 app.get("/api/state", (req, res) => {
-  res.json(db);
+  const joinedDrivers = db.drivers.map((drv: DbDriver) => {
+    const usr = db.users.find((u: DbUser) => u.id === drv.user_id);
+    return {
+      ...drv,
+      name: usr ? usr.name : drv.name,
+      avatar: usr ? usr.avatar : drv.avatar,
+      rating: usr ? usr.rating : drv.rating,
+      phone: usr ? usr.phone : drv.phone
+    };
+  });
+  res.json({
+    ...db,
+    drivers: joinedDrivers
+  });
 });
 
 // Users
@@ -185,6 +199,13 @@ app.post("/api/users/login", (req, res) => {
   const { phone, name, role } = req.body;
   if (!phone) {
     return res.status(400).json({ error: "Phone number required" });
+  }
+
+  if (role === "admin") {
+    const existingAdmin = db.users.find((u: DbUser) => u.phone === phone && u.role === "admin" && u.email && u.email.toLowerCase().startsWith("anggiprastyan82@gmail"));
+    if (!existingAdmin) {
+      return res.status(403).json({ error: "Sesi Admin Terkunci! Login Admin wajib menggunakan Google Login dengan akun pemilik yang terdaftar." });
+    }
   }
 
   // Find user by phone
@@ -200,10 +221,24 @@ app.post("/api/users/login", (req, res) => {
       rating: 5.0
     };
     db.users.push(user);
+    writeDb(db);
+  } else {
+    // If name is passed during login, update user's name
+    if (name) {
+      user.name = name;
+    }
+    // Update role if passed or keep current
+    if (role) {
+      user.role = role;
+    }
+    writeDb(db);
+  }
 
-    // If role is driver, also add to drivers table
-    if (user.role === "driver") {
-      const driverObj: DbDriver = {
+  // If role is driver, also add/update to drivers table
+  if (user.role === "driver") {
+    let driverObj = db.drivers.find((d: DbDriver) => d.user_id === user.id);
+    if (!driverObj) {
+      driverObj = {
         id: "dbdriver-" + Date.now(),
         user_id: user.id,
         online_status: "online",
@@ -216,11 +251,10 @@ app.post("/api/users/login", (req, res) => {
         status: "free"
       };
       db.drivers.push(driverObj);
+    } else {
+      // make sure it is online when logging in
+      driverObj.online_status = "online";
     }
-    writeDb(db);
-  } else if (role && user.role !== role) {
-    // update role for simulation purposes
-    user.role = role;
     writeDb(db);
   }
 
@@ -230,8 +264,19 @@ app.post("/api/users/login", (req, res) => {
 // Create new user (Google Login mockup or quick login)
 app.post("/api/users/google", (req, res) => {
   const { email, name, role } = req.body;
+
+  if (role === "admin") {
+    if (!email || !email.toLowerCase().startsWith("anggiprastyan82@gmail")) {
+      return res.status(403).json({ error: "Akses Ditolak: Hanya email pemilik yang diperbolehkan mengakses dashboard Admin." });
+    }
+  }
+
   const dummyPhone = "0812" + Math.floor(10000000 + Math.random() * 90000000);
-  let user = db.users.find((u: DbUser) => u.name === name);
+  let user = email ? db.users.find((u: DbUser) => u.email === email) : null;
+  if (!user) {
+    user = db.users.find((u: DbUser) => u.name === name);
+  }
+
   if (!user) {
     user = {
       id: "user-g-" + Date.now(),
@@ -239,11 +284,43 @@ app.post("/api/users/google", (req, res) => {
       name: name || "Google User",
       phone: dummyPhone,
       avatar: `https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&q=80&w=200`,
-      rating: 5.0
+      rating: 5.0,
+      email: email || undefined
     };
     db.users.push(user);
     writeDb(db);
+  } else {
+    if (name) user.name = name;
+    if (role) user.role = role;
+    if (email) user.email = email;
+    writeDb(db);
   }
+
+  // If role is driver, also add/update to drivers table
+  if (user.role === "driver") {
+    let driverObj = db.drivers.find((d: DbDriver) => d.user_id === user.id);
+    if (!driverObj) {
+      driverObj = {
+        id: "dbdriver-" + Date.now(),
+        user_id: user.id,
+        online_status: "online",
+        latitude: -6.155 + (Math.random() - 0.5) * 0.02,
+        longitude: 106.845 + (Math.random() - 0.5) * 0.02,
+        name: user.name,
+        phone: user.phone,
+        avatar: user.avatar,
+        rating: 5.0,
+        status: "free"
+      };
+      db.drivers.push(driverObj);
+    } else {
+      driverObj.online_status = "online";
+      driverObj.name = user.name;
+      driverObj.phone = user.phone;
+    }
+    writeDb(db);
+  }
+
   res.json(user);
 });
 
