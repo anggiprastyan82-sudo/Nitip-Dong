@@ -63,6 +63,30 @@ export default function App() {
 
   // Active Simulated View mode (RoleSelector)
   const [simulatorRole, setSimulatorRole] = useState<'customer' | 'driver' | 'admin'>('customer');
+  const [autoOpenedOnline, setAutoOpenedOnline] = useState(false);
+
+  // Sync simulator role with currentUser role on login
+  useEffect(() => {
+    if (currentUser) {
+      setSimulatorRole(currentUser.role);
+    }
+  }, [currentUser]);
+
+  // Reset autoOpenedOnline on user or role switch
+  useEffect(() => {
+    setAutoOpenedOnline(false);
+  }, [currentUser?.id, simulatorRole]);
+
+  // Auto-activate online status for logged in drivers
+  useEffect(() => {
+    if (currentUser?.role === 'driver' && simulatorRole === 'driver' && !autoOpenedOnline && drivers.length > 0) {
+      const currentDriver = drivers.find(d => d.user_id === currentUser.id);
+      if (currentDriver && currentDriver.online_status !== 'online') {
+        handleToggleOnline('online');
+      }
+      setAutoOpenedOnline(true);
+    }
+  }, [currentUser, simulatorRole, drivers, autoOpenedOnline]);
 
   // Load and Pool state from backend
   const fetchState = async () => {
